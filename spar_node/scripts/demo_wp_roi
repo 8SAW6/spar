@@ -37,6 +37,7 @@ class Guidance():
 
 		# Internal counter to see what waypoint were are up to
 		self.nextWaypointIndex = 0
+		self.waypoint_counter = 0
 
 		# Set a flag to indicate that we are doing a specific inspection
 		# and that we are not following our waypoint list
@@ -69,8 +70,10 @@ class Guidance():
 		# Wait to connect with Breadcrumb (Warning, you code might get stuck in here if breadcrumb is not running)
 		# Code will error if you try to connect to a service
 		# that does not exist
-		rospy.wait_for_service('/breadcrumb/request_path')
-		self.srvc_bc = rospy.ServiceProxy('/breadcrumb/request_path', RequestPath)
+		
+		##########BREADCRUMB DEACTIVATED ####################################################################################
+		#rospy.wait_for_service('/breadcrumb/request_path')
+		#self.srvc_bc = rospy.ServiceProxy('/breadcrumb/request_path', RequestPath)
 
 		if not rospy.is_shutdown():
 			# Good to go, start mission
@@ -95,10 +98,8 @@ class Guidance():
 			# XXX: These topics could be hard-coded to avoid using a launch file
 			self.sub_pose = rospy.Subscriber("~pose", PoseStamped, self.callback_pose)
 			# Subscriber to catch "ROI" diversion commands
-			#####################      TESTING ROI SUBSCRIBER CODE    ############################
-			#self.sub_roi = rospy.Subscriber("~roi", PoseStamped, self.callback_inspect_roi)
-			#self.sub_roi = rospy.Subscriber("/target_detection/roi", PoseStamped, self.callback_inspect_roi)
-			self.sub_roi = rospy.Subscriber("/target_detection/roi", PoseStamped, self.roi_debug)
+			self.sub_roi = rospy.Subscriber("/target_detection/roi", PoseStamped, self.callback_inspect_roi)
+
 			# XXX: Could have a publisher to output our waypoint progress
 			# throughout the flight (should publish each time the waypoint
 			# counter is increased). Note: will also need to import "Float32"
@@ -109,9 +110,6 @@ class Guidance():
 	 		# mission before rospy is shutdown.
 			rospy.loginfo("Running callbacks while not shutdown...")
 			rospy.on_shutdown( lambda : self.shutdown() )
-
-	def roi_debug():
-		rospy.loginfo("ROI message received")
 
 	# This function will check if a list of waypoints is in the format we expect
 	def check_waypoints(self, wps):
@@ -178,7 +176,6 @@ class Guidance():
 	# This function will fire whenever a ROI pose message is sent
 	# It is also responsible for handling the ROI "inspection task"
 	def callback_inspect_roi(self, msg_in):
-		rospy.loginfo("callback_inspect_roi called")
 		# Set our flag that we are performing the diversion
 		self.performing_roi = True
 
@@ -209,7 +206,7 @@ class Guidance():
 		# XXX: Do something?
 		rospy.sleep(rospy.Duration(10))
 
-		 rospy.loginfo("Returning to flight plan...")
+		rospy.loginfo("Returning to flight plan...")
 
 		self.send_wp(rwp)
 		self.spar_client.wait_for_result()
@@ -262,85 +259,117 @@ class Guidance():
 	# The main purpose is to check if a waypoint has been reached,
 	# and if so, send out the next waypoint to continue the mission
 	def check_waypoint_status(self, te):
+		# # If we're performing the ROI diversion, then don't do
+		# # anything here, as this is handled in that function
+		# if not self.performing_roi:
+		# 	# If the last segment has succeeded.
+		# 	# For more complex tasks, it might be necessary to also
+		# 	# check if you are in waypoint or breadcrum mode.
+		# 	# Hint: really, we should check for other status states
+		# 	#		(such as aborted), as there are some states
+		# 	#		where we won't recover from, and should just exit
+		# 	if self.spar_client.get_state() == GoalStatus.SUCCEEDED:
+		# 		rospy.loginfo("Reached waypoint %i!" % (self.nextWaypointIndex))
+
+		# 		# XXX:	Another check could go here to finish the mission early
+		# 		#		if "all" inspection tasks have been completed
+		# 		#		(Add in another "if" and make the waypoint counter check
+		# 		#		 an "elif" check instead.
+		# 		#		 i.e. if complete; elif more wps; else wps finished)
+		# 		if self.nextWaypointIndex < (len(self.waypoints)):
+
+		# 			if not self.breadcrumbMode:
+		# 				# Set up a path request for breadcrumb
+		# 				req = RequestPathRequest()
+		# 				req.start.x = self.waypoints[self.nextWaypointIndex-1][0] # Get X
+		# 				req.start.y = self.waypoints[self.nextWaypointIndex-1][1] # Get Y
+		# 				req.start.z = self.waypoints[self.nextWaypointIndex-1][2] # Get Z
+		# 				req.end.x = self.waypoints[self.nextWaypointIndex][0]	# Get next X
+		# 				req.end.y = self.waypoints[self.nextWaypointIndex][1]	# Get next Y
+		# 				req.end.z = self.waypoints[self.nextWaypointIndex][2]	# Get next Z
+
+		# 				res = self.srvc_bc(req)
+						
+		# 				# Breadcrumb will return a vector of poses if a solution was found
+		# 				# If no solution was found (i.e. no solution, or request bad
+		# 				# start/end), then breadcrumb returns and empty vector
+		# 				# XXX: You could also use res.path_sparse (see breadcrumb docs)
+		# 				breadcrumbWPS = []
+		# 				if len(res.path_sparse.poses) > 0:
+		# 					# Print the path to the screen
+		# 					rospy.loginfo("Segment {}-1 to {}:".format(self.nextWaypointIndex,self.nextWaypointIndex))
+		# 					rospy.loginfo("[%0.2f;%0.2f;%0.2f] => [%0.2f;%0.2f;%0.2f]",
+		# 								req.start.x,req.start.y,req.start.z,
+		# 								req.end.x,req.end.y,req.end.z)
+
+		# 					# Loop through the solution returned from breadcrumb
+		# 					for i in range(len(res.path_sparse.poses)):
+		# 						rospy.loginfo("    [%0.2f;%0.2f;%0.2f]",
+		# 									res.path_sparse.poses[i].position.x,
+		# 									res.path_sparse.poses[i].position.y,
+		# 									res.path_sparse.poses[i].position.z)
+		# 						breadcrumbWPS.append([res.path_sparse.poses[i].position.x, res.path_sparse.poses[i].position.y, res.path_sparse.poses[i].position.z, 0.0])
+
+		# 					# Display the path
+		# 					# print(breadcrumbWPS)
+		# 					self.breadcrumbWPS = breadcrumbWPS
+		# 					self.display_path(breadcrumbWPS,"/guidance/pathBreadcrum")
+		# 					self.breadcrumbMode = True
+		# 					self.breadcrumbWPSnextIndex = 0
+		# 					self.send_wp(self.breadcrumbWPS[self.breadcrumbWPSnextIndex])
+		# 					self.breadcrumbWPSnextIndex +=1 
+
+		# 				else:
+		# 					rospy.logerr("solution not found")
+
+		# 			else:
+		# 				if self.breadcrumbWPSnextIndex < (len(self.breadcrumbWPS)):
+		# 					# We got here a breadcrumb path, we should exuted down here:
+		# 					self.send_wp(self.breadcrumbWPS[self.breadcrumbWPSnextIndex])
+		# 					# Increment our waypoint counter
+		# 					self.breadcrumbWPSnextIndex +=1
+		# 				else:
+		# 					# If we finish with the breadcrumb waypoints we increase normal waypoints
+		# 					self.nextWaypointIndex += 1
+		# 					self.breadcrumbMode = False
+		# 		else:
+		# 			# Else the mission is over, shutdown and quit the node
+		# 			# XXX:	This could be used to restart the mission back to the
+		# 			#		first waypoint instead to restart the mission
+		# 			rospy.loginfo("Mission complete!")
+		# 			rospy.signal_shutdown("Complete, Wooh!")
+		# 	elif (self.spar_client.get_state() == GoalStatus.PREEMPTED) or (self.spar_client.get_state() == GoalStatus.ABORTED) or (self.spar_client.get_state() == GoalStatus.REJECTED):
+		# 		rospy.loginfo("Mission cancelled!")
+		# 		rospy.signal_shutdown("cancelled")
+
+
 		# If we're performing the ROI diversion, then don't do
 		# anything here, as this is handled in that function
 		if not self.performing_roi:
 			# If the last segment has succeeded.
 			# For more complex tasks, it might be necessary to also
-			# check if you are in waypoint or breadcrum mode.
+			# check if you are in waypoint or diversion mode here.
 			# Hint: really, we should check for other status states
 			#		(such as aborted), as there are some states
 			#		where we won't recover from, and should just exit
 			if self.spar_client.get_state() == GoalStatus.SUCCEEDED:
-				rospy.loginfo("Reached waypoint %i!" % (self.nextWaypointIndex))
+				rospy.loginfo("Reached waypoint %i!" % (self.waypoint_counter))
 
 				# XXX:	Another check could go here to finish the mission early
 				#		if "all" inspection tasks have been completed
 				#		(Add in another "if" and make the waypoint counter check
 				#		 an "elif" check instead.
 				#		 i.e. if complete; elif more wps; else wps finished)
-				if self.nextWaypointIndex < (len(self.waypoints)):
-
-					if not self.breadcrumbMode:
-						# Set up a path request for breadcrumb
-						req = RequestPathRequest()
-						req.start.x = self.waypoints[self.nextWaypointIndex-1][0] # Get X
-						req.start.y = self.waypoints[self.nextWaypointIndex-1][1] # Get Y
-						req.start.z = self.waypoints[self.nextWaypointIndex-1][2] # Get Z
-						req.end.x = self.waypoints[self.nextWaypointIndex][0]	# Get next X
-						req.end.y = self.waypoints[self.nextWaypointIndex][1]	# Get next Y
-						req.end.z = self.waypoints[self.nextWaypointIndex][2]	# Get next Z
-
-						res = self.srvc_bc(req)
-						
-						# Breadcrumb will return a vector of poses if a solution was found
-						# If no solution was found (i.e. no solution, or request bad
-						# start/end), then breadcrumb returns and empty vector
-						# XXX: You could also use res.path_sparse (see breadcrumb docs)
-						breadcrumbWPS = []
-						if len(res.path_sparse.poses) > 0:
-							# Print the path to the screen
-							rospy.loginfo("Segment {}-1 to {}:".format(self.nextWaypointIndex,self.nextWaypointIndex))
-							rospy.loginfo("[%0.2f;%0.2f;%0.2f] => [%0.2f;%0.2f;%0.2f]",
-										req.start.x,req.start.y,req.start.z,
-										req.end.x,req.end.y,req.end.z)
-
-							# Loop through the solution returned from breadcrumb
-							for i in range(len(res.path_sparse.poses)):
-								rospy.loginfo("    [%0.2f;%0.2f;%0.2f]",
-											res.path_sparse.poses[i].position.x,
-											res.path_sparse.poses[i].position.y,
-											res.path_sparse.poses[i].position.z)
-								breadcrumbWPS.append([res.path_sparse.poses[i].position.x, res.path_sparse.poses[i].position.y, res.path_sparse.poses[i].position.z, 0.0])
-
-							# Display the path
-							# print(breadcrumbWPS)
-							self.breadcrumbWPS = breadcrumbWPS
-							self.display_path(breadcrumbWPS,"/guidance/pathBreadcrum")
-							self.breadcrumbMode = True
-							self.breadcrumbWPSnextIndex = 0
-							self.send_wp(self.breadcrumbWPS[self.breadcrumbWPSnextIndex])
-							self.breadcrumbWPSnextIndex +=1 
-
-						else:
-							rospy.logerr("solution not found")
-
-					else:
-						if self.breadcrumbWPSnextIndex < (len(self.breadcrumbWPS)):
-							# We got here a breadcrumb path, we should exuted down here:
-							self.send_wp(self.breadcrumbWPS[self.breadcrumbWPSnextIndex])
-							# Increment our waypoint counter
-							self.breadcrumbWPSnextIndex +=1
-						else:
-							# If we finish with the breadcrumb waypoints we increase normal waypoints
-							self.nextWaypointIndex += 1
-							self.breadcrumbMode = False
+				if self.waypoint_counter < (len(self.waypoints)):
+					self.send_wp(self.waypoints[self.waypoint_counter])
+					# Increment our waypoint counter
+					self.waypoint_counter += 1
 				else:
 					# Else the mission is over, shutdown and quit the node
 					# XXX:	This could be used to restart the mission back to the
 					#		first waypoint instead to restart the mission
 					rospy.loginfo("Mission complete!")
-					rospy.signal_shutdown("Complete, Wooh!")
+					rospy.signal_shutdown("complete")
 			elif (self.spar_client.get_state() == GoalStatus.PREEMPTED) or (self.spar_client.get_state() == GoalStatus.ABORTED) or (self.spar_client.get_state() == GoalStatus.REJECTED):
 				rospy.loginfo("Mission cancelled!")
 				rospy.signal_shutdown("cancelled")
