@@ -2,7 +2,7 @@
 
 import sys
 from math import *
-
+from std_msgs.msg import UInt8
 import rospy
 import actionlib
 from actionlib_msgs.msg import GoalStatus
@@ -38,6 +38,7 @@ class Guidance():
 		# Internal counter to see what waypoint were are up to
 		self.nextWaypointIndex = 0
 		self.waypoint_counter = 0
+		target = 2
 
 		# Set a flag to indicate that we are doing a specific inspection
 		# and that we are not following our waypoint list
@@ -203,9 +204,13 @@ class Guidance():
 			return
 
 		rospy.loginfo("Reached diversion ROI!")
-		# XXX: Do something?
-		rospy.sleep(rospy.Duration(10))
+		# CODE FOR HOVER AND PAYLOAD DEPLOYMENT
 
+		rospy.sleep(rospy.Duration(6))
+		rospy.loginfo(f"Sending payload deployment {self.target_id}")
+		self.payload_id = UInt8()
+		self.payload_id.data = target
+		pub_payload.Publish(self.payload_id.data)
 		rospy.loginfo("Returning to flight plan...")
 
 		self.send_wp(rwp)
@@ -430,6 +435,9 @@ def main(args):
 
 	# Create our guidance class option
 	guide = Guidance(wps)
+
+	#Create a publisher for payload commands
+	pub_payload = rospy.Publisher('payloadcommands', UInt8, queue_size=2)
 
 	# Spin!
 	rospy.spin()
