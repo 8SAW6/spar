@@ -17,6 +17,9 @@ from spar_msgs.msg import FlightMotionAction, FlightMotionGoal
 from breadcrumb.srv import RequestPath
 from breadcrumb.srv import RequestPathRequest
 
+import numpy as np
+maker_array = np.ones((100, 2))
+
 
 # This is getting a bit more complicated now, so we'll put our information in
 # a class to keep track of all of our variables. This is not so much different
@@ -38,7 +41,10 @@ class Guidance():
 		# Internal counter to see what waypoint were are up to
 		self.nextWaypointIndex = 0
 		self.waypoint_counter = 0
-		target = 2
+		self.target = 2
+
+		#Create a publisher for payload commands
+		self.pub_payload = rospy.Publisher('payloadcommands', UInt8, queue_size=2)
 
 		# Set a flag to indicate that we are doing a specific inspection
 		# and that we are not following our waypoint list
@@ -207,10 +213,11 @@ class Guidance():
 		# CODE FOR HOVER AND PAYLOAD DEPLOYMENT
 
 		rospy.sleep(rospy.Duration(6))
-		rospy.loginfo(f"Sending payload deployment {self.target_id}")
+		
 		self.payload_id = UInt8()
-		self.payload_id.data = target
-		pub_payload.Publish(self.payload_id.data)
+		self.payload_id.data = self.target
+		rospy.loginfo(f"Sending payload deployment {self.payload_id.data}")
+		self.pub_payload.publish(self.payload_id.data)
 		rospy.loginfo("Returning to flight plan...")
 
 		self.send_wp(rwp)
@@ -436,8 +443,7 @@ def main(args):
 	# Create our guidance class option
 	guide = Guidance(wps)
 
-	#Create a publisher for payload commands
-	pub_payload = rospy.Publisher('payloadcommands', UInt8, queue_size=2)
+	
 
 	# Spin!
 	rospy.spin()
