@@ -5,7 +5,7 @@ import math
 import rospy
 import tf2_ros
 from std_msgs.msg import Time
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, PoseStamped
 
 # Global Variables
 tfbr = None
@@ -14,7 +14,7 @@ pub_found = None
 camera_name = "camera"
 target_name = "target"
 
-def send_tf_target():
+def send_tf_target(msg_in):
 	# Generate our "found" timestamp
 	time_found = rospy.Time.now()
 
@@ -24,16 +24,19 @@ def send_tf_target():
 	t.header.stamp = time_found
 	t.header.frame_id = camera_name
 	t.child_frame_id = target_name
+	
+	
     # In here we need a code to get the target location relative to the camera (Perhaps solve PnP)
 
     # Once we know where the target is, relative to the camera frame, we create and sent that transform (relative position target to camera)
-	t.transform.translation.x = -0
-	t.transform.translation.y = 0
-	t.transform.translation.z = 0     # - altitude of the UAV camera Z.
+	t.transform.translation.x = msg_in.transform.translation.x
+	t.transform.translation.y = msg_in.transform.translation.y
+	t.transform.translation.z = msg_in.transform.translation.z
 	t.transform.rotation.x = 0.0
 	t.transform.rotation.y = 0.0
 	t.transform.rotation.z = 0.0
 	t.transform.rotation.w = 1.0
+	
 
 	# Send the transformation to TF
 	# and "found" timestamp to localiser
@@ -48,13 +51,16 @@ if __name__ == '__main__':
 	tfbr = tf2_ros.TransformBroadcaster()
 	pub_found = rospy.Publisher('/emulated_uav/target_found', Time, queue_size=10)
 
+	# Subscriber to listen to the target detection topic for pose updates
+	rospy.Subscriber('/processed_aruco/pose', PoseStamped, send_tf_target)
 	# Give the nodes a few seconds to configure
 	rospy.sleep(rospy.Duration(2))
 
 	# Send out our target messages
-	send_tf_target()
+	
 
 	# Give the nodes a few seconds to transmit data
 	# then we can exit
 	rospy.sleep(rospy.Duration(2))
 	rospy.loginfo("tf2_broadcaster_target sent TF and timestamp")
+	rospy.spin()
